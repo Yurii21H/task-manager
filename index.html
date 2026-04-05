@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TaskFlow — Task Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f4ff;--white:#ffffff;--surface:#f8faff;
+  --accent:#6366f1;--accent-light:#ede9fe;--accent-dark:#4338ca;
+  --red:#ef4444;--red-light:#fee2e2;
+  --yellow:#f59e0b;--yellow-light:#fef3c7;
+  --green:#10b981;--green-light:#d1fae5;
+  --text:#1e1b4b;--muted:#6b7280;--border:#e5e7eb;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(99,102,241,.06);
+}
+body{background:var(--bg);font-family:'Outfit',sans-serif;color:var(--text);min-height:100vh}
+#root{display:flex;flex-direction:column;min-height:100vh}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+const PRIORITIES = { high:'High', medium:'Medium', low:'Low' };
+const FILTERS = ['All','Active','Completed'];
+
+const PRIORITY_STYLE = {
+  high:   { bg:'#fee2e2', color:'#b91c1c', dot:'#ef4444' },
+  medium: { bg:'#fef3c7', color:'#92400e', dot:'#f59e0b' },
+  low:    { bg:'#d1fae5', color:'#065f46', dot:'#10b981' },
+};
+
+function useLocalStorage(key, init) {
+  const [val, setVal] = useState(() => {
+    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : init; }
+    catch { return init; }
+  });
+  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }, [key, val]);
+  return [val, setVal];
+}
+
+function App() {
+  const [tasks, setTasks] = useLocalStorage('taskflow-tasks', [
+    { id:1, text:'Set up GitHub profile and push first project', priority:'high', done:false, created: Date.now()-86400000 },
+    { id:2, text:'Complete portfolio website', priority:'high', done:true, created: Date.now()-172800000 },
+    { id:3, text:'Learn React Hooks in depth', priority:'medium', done:false, created: Date.now()-43200000 },
+    { id:4, text:'Write README files for all projects', priority:'low', done:false, created: Date.now()-21600000 },
+  ]);
+  const [input, setInput] = useState('');
+  const [priority, setPriority] = useState('medium');
+  const [filter, setFilter] = useState('All');
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => tasks
+    .filter(t => filter === 'All' ? true : filter === 'Active' ? !t.done : t.done)
+    .filter(t => t.text.toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b) => {
+      const order = { high:0, medium:1, low:2 };
+      if(a.done !== b.done) return a.done ? 1 : -1;
+      return order[a.priority] - order[b.priority];
+    }), [tasks, filter, search]);
+
+  const stats = useMemo(() => ({
+    total: tasks.length,
+    done: tasks.filter(t=>t.done).length,
+    high: tasks.filter(t=>t.priority==='high'&&!t.done).length,
+  }), [tasks]);
+
+  function addTask(e) {
+    e.preventDefault();
+    if(!input.trim()) return;
+    setTasks(prev => [...prev, { id:Date.now(), text:input.trim(), priority, done:false, created:Date.now() }]);
+    setInput('');
+  }
+  function toggle(id) { setTasks(p => p.map(t => t.id===id ? {...t,done:!t.done} : t)); }
+  function remove(id) { setTasks(p => p.filter(t => t.id!==id)); }
+  function clearDone() { setTasks(p => p.filter(t=>!t.done)); }
+
+  const pct = stats.total ? Math.round((stats.done/stats.total)*100) : 0;
+
+  return (
+    <div style={{maxWidth:680,margin:'0 auto',padding:'40px 20px'}}>
+      {/* Header */}
+      <div style={{marginBottom:32}}>
+        <h1 style={{fontSize:'2rem',fontWeight:700,color:'#1e1b4b',letterSpacing:'-.02em'}}>
+          TaskFlow <span style={{fontSize:'1rem',fontWeight:400,color:'#6366f1'}}>/ Manager</span>
+        </h1>
+        <p style={{color:'#6b7280',marginTop:4,fontSize:'.9rem'}}>Stay organized. Ship faster.</p>
+      </div>
+
+      {/* Stats */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:24}}>
+        {[
+          { label:'Total', value:stats.total, color:'#6366f1' },
+          { label:'Done', value:stats.done, color:'#10b981' },
+          { label:'Urgent', value:stats.high, color:'#ef4444' },
+        ].map(s => (
+          <div key={s.label} style={{background:'#fff',borderRadius:12,padding:'16px 20px',boxShadow:'0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(99,102,241,.06)'}}>
+            <div style={{fontSize:'1.8rem',fontWeight:700,color:s.color,lineHeight:1}}>{s.value}</div>
+            <div style={{fontSize:'.8rem',color:'#9ca3af',marginTop:4}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress */}
+      <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',marginBottom:24,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+          <span style={{fontSize:'.85rem',color:'#6b7280'}}>Overall Progress</span>
+          <span style={{fontSize:'.85rem',fontWeight:600,color:'#6366f1'}}>{pct}%</span>
+        </div>
+        <div style={{height:8,borderRadius:99,background:'#e5e7eb',overflow:'hidden'}}>
+          <div style={{height:'100%',borderRadius:99,background:'linear-gradient(90deg,#6366f1,#818cf8)',width:`${pct}%`,transition:'width .4s ease'}}/>
+        </div>
+      </div>
+
+      {/* Add Form */}
+      <form onSubmit={addTask} style={{background:'#fff',borderRadius:14,padding:20,marginBottom:24,boxShadow:'0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(99,102,241,.06)'}}>
+        <div style={{display:'flex',gap:10,marginBottom:12}}>
+          <input
+            value={input} onChange={e=>setInput(e.target.value)}
+            placeholder="Add a new task..."
+            style={{flex:1,border:'1.5px solid #e5e7eb',borderRadius:8,padding:'10px 14px',fontSize:'.95rem',outline:'none',color:'#1e1b4b',fontFamily:'Outfit,sans-serif',transition:'border-color .2s'}}
+            onFocus={e=>e.target.style.borderColor='#6366f1'}
+            onBlur={e=>e.target.style.borderColor='#e5e7eb'}
+          />
+          <button type="submit" style={{background:'#6366f1',color:'#fff',border:'none',borderRadius:8,padding:'10px 20px',fontWeight:600,fontSize:'.9rem',cursor:'pointer',whiteSpace:'nowrap',fontFamily:'Outfit,sans-serif'}}>
+            + Add
+          </button>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          {Object.entries(PRIORITIES).map(([k,v]) => {
+            const s = PRIORITY_STYLE[k];
+            const active = priority===k;
+            return (
+              <button key={k} type="button" onClick={()=>setPriority(k)}
+                style={{border:`1.5px solid ${active ? s.dot : '#e5e7eb'}`,background:active?s.bg:'transparent',color:active?s.color:'#9ca3af',padding:'5px 14px',borderRadius:99,fontSize:'.8rem',fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontFamily:'Outfit,sans-serif',transition:'all .15s'}}>
+                <span style={{width:7,height:7,borderRadius:'50%',background:s.dot,display:'inline-block'}}/>
+                {v}
+              </button>
+            );
+          })}
+        </div>
+      </form>
+
+      {/* Search + Filter */}
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
+        <input
+          value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="🔍  Search tasks..."
+          style={{flex:1,minWidth:180,border:'1.5px solid #e5e7eb',borderRadius:8,padding:'8px 14px',fontSize:'.875rem',outline:'none',fontFamily:'Outfit,sans-serif',color:'#1e1b4b'}}
+        />
+        <div style={{display:'flex',gap:4,background:'#fff',borderRadius:8,padding:3,border:'1px solid #e5e7eb'}}>
+          {FILTERS.map(f => (
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{border:'none',borderRadius:6,padding:'5px 14px',fontSize:'.8rem',fontWeight:600,cursor:'pointer',fontFamily:'Outfit,sans-serif',background:filter===f?'#6366f1':'transparent',color:filter===f?'#fff':'#6b7280',transition:'all .15s'}}>
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Task List */}
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {filtered.length === 0 && (
+          <div style={{textAlign:'center',padding:'48px 0',color:'#9ca3af'}}>
+            <div style={{fontSize:'2.5rem',marginBottom:8}}>✅</div>
+            <div style={{fontWeight:500}}>No tasks found</div>
+          </div>
+        )}
+        {filtered.map(task => {
+          const s = PRIORITY_STYLE[task.priority];
+          return (
+            <div key={task.id} style={{background:'#fff',borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,boxShadow:'0 1px 2px rgba(0,0,0,.05)',border:'1px solid #f3f4f6',transition:'box-shadow .2s,transform .2s'}}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 20px rgba(99,102,241,.12)';e.currentTarget.style.transform='translateY(-1px)'}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 1px 2px rgba(0,0,0,.05)';e.currentTarget.style.transform='none'}}>
+              <input type="checkbox" checked={task.done} onChange={()=>toggle(task.id)}
+                style={{width:18,height:18,cursor:'pointer',accentColor:'#6366f1',flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:'.95rem',fontWeight:500,color:task.done?'#9ca3af':'#1e1b4b',textDecoration:task.done?'line-through':'none',transition:'color .2s'}}>{task.text}</div>
+              </div>
+              <span style={{background:s.bg,color:s.color,padding:'2px 10px',borderRadius:99,fontSize:'.72rem',fontWeight:700,flexShrink:0}}>
+                {PRIORITIES[task.priority]}
+              </span>
+              <button onClick={()=>remove(task.id)}
+                style={{background:'none',border:'none',color:'#d1d5db',cursor:'pointer',fontSize:'1.1rem',padding:'2px 4px',lineHeight:1,transition:'color .15s'}}
+                onMouseEnter={e=>e.currentTarget.style.color='#ef4444'}
+                onMouseLeave={e=>e.currentTarget.style.color='#d1d5db'}>×</button>
+            </div>
+          );
+        })}
+      </div>
+
+      {stats.done > 0 && (
+        <button onClick={clearDone}
+          style={{marginTop:16,background:'none',border:'1.5px dashed #e5e7eb',borderRadius:8,padding:'8px 16px',color:'#9ca3af',cursor:'pointer',fontSize:'.8rem',fontWeight:500,width:'100%',fontFamily:'Outfit,sans-serif',transition:'all .15s'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor='#ef4444';e.currentTarget.style.color='#ef4444'}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#e5e7eb';e.currentTarget.style.color='#9ca3af'}}>
+          Clear {stats.done} completed task{stats.done>1?'s':''}
+        </button>
+      )}
+
+      <p style={{textAlign:'center',color:'#d1d5db',fontSize:'.75rem',marginTop:32}}>Built with React · TaskFlow by Yurii Hohol</p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
